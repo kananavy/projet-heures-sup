@@ -7,6 +7,7 @@ import enseignantRoutes from "./routes/enseignantRoutes.js";
 
 dotenv.config();
 const app = express();
+
 app.use(cors());
 app.use(bodyParser.json());
 
