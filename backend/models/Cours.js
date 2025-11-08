@@ -1,17 +1,18 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../config/db.js";
-import Enseignant from "./Enseignant.js";
 
 const Cours = sequelize.define("Cours", {
-  niveau: { type: DataTypes.STRING },
-  parcours: { type: DataTypes.STRING },
+  typeCours: { type: DataTypes.STRING },
+  dateCours: { type: DataTypes.DATEONLY },
+  heureDebut: { type: DataTypes.TIME },
+  heureFin: { type: DataTypes.TIME },
   mention: { type: DataTypes.STRING },
-  jour: { type: DataTypes.STRING },
-  typeCours: { type: DataTypes.ENUM("ET", "EP") },
-  heures: { type: DataTypes.FLOAT },
+  parcours: { type: DataTypes.STRING },
+  niveau: { type: DataTypes.STRING },
+  ue: { type: DataTypes.STRING },
+  ec: { type: DataTypes.STRING },
+  duree: { type: DataTypes.FLOAT },
+  enseignantName: { type: DataTypes.STRING },
 });
-
-Enseignant.hasMany(Cours, { onDelete: "CASCADE" });
-Cours.belongsTo(Enseignant);
 
 export default Cours;

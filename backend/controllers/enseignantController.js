@@ -1,49 +1,141 @@
 import Enseignant from "../models/Enseignant.js";
 import Cours from "../models/Cours.js";
 
-// Liste tous les enseignants avec leurs cours
-export const getAll = async (req, res) => {
-  const enseignants = await Enseignant.findAll({ include: Cours });
-  res.json(enseignants);
+// Fonction pour recalculer les heures et renvoyer un objet simple
+function recalcJSON(enseignant) {
+  const total = enseignant.cours?.reduce((s, c) => s + (parseFloat(c.duree) || 0), 0) || 0;
+  const sup = total > (enseignant.volumeHoraire || 0) ? total - (enseignant.volumeHoraire || 0) : 0;
+  return {
+    id: enseignant.id,
+    nom: enseignant.nom,
+    mention: enseignant.mention,
+    parcours: enseignant.parcours,
+    niveau: enseignant.niveau,
+    ue: enseignant.ue,
+    ec: enseignant.ec,
+    volumeHoraire: enseignant.volumeHoraire || 0,
+    heuresNormales: total - sup,
+    heuresSupplementaires: sup,
+    cours: enseignant.cours?.map(c => ({
+      id: c.id,
+      typeCours: c.typeCours,
+      dateCours: c.dateCours,
+      heureDebut: c.heureDebut,
+      heureFin: c.heureFin,
+      mention: c.mention,
+      parcours: c.parcours,
+      niveau: c.niveau,
+      ue: c.ue,
+      ec: c.ec,
+      duree: c.duree,
+      enseignantName: c.enseignantName
+    })) || []
+  };
+}
+
+// Lister tous les enseignants
+export const list = async (req, res) => {
+  try {
+    const enseignants = await Enseignant.findAll({
+      include: { model: Cours, as: "cours" },
+      order: [["createdAt", "DESC"]]
+    });
+    res.json(enseignants.map(e => recalcJSON(e)));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 };
 
-// Créer un enseignant
+// Créer un nouvel enseignant
 export const create = async (req, res) => {
-  const enseignant = await Enseignant.create(req.body);
-  res.json(enseignant);
+  try {
+    const enseignant = await Enseignant.create(req.body);
+    const ens = await Enseignant.findByPk(enseignant.id, { 
+      include: { model: Cours, as: "cours" } 
+    });
+    res.status(201).json(recalcJSON(ens));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Récupérer un enseignant
+export const getOne = async (req, res) => {
+  try {
+    const ens = await Enseignant.findByPk(req.params.id, { 
+      include: { model: Cours, as: "cours" } 
+    });
+    if (!ens) return res.status(404).json({ error: "Introuvable" });
+    res.json(recalcJSON(ens));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 };
 
 // Mettre à jour un enseignant
 export const update = async (req, res) => {
-  const enseignant = await Enseignant.findByPk(req.params.id);
-  if (!enseignant) return res.status(404).json({ message: "Introuvable" });
-  await enseignant.update(req.body);
-  res.json(enseignant);
+  try {
+    const enseignant = await Enseignant.findByPk(req.params.id);
+    if (!enseignant) return res.status(404).json({ error: "Enseignant introuvable" });
+    
+    await enseignant.update(req.body);
+    const ens = await Enseignant.findByPk(enseignant.id, { 
+      include: { model: Cours, as: "cours" } 
+    });
+    res.json(recalcJSON(ens));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 };
 
 // Supprimer un enseignant
 export const remove = async (req, res) => {
-  const enseignant = await Enseignant.findByPk(req.params.id);
-  if (!enseignant) return res.status(404).json({ message: "Introuvable" });
-  await enseignant.destroy();
-  res.json({ message: "Supprimé" });
+  try {
+    const enseignant = await Enseignant.findByPk(req.params.id);
+    if (!enseignant) return res.status(404).json({ error: "Enseignant introuvable" });
+    
+    await enseignant.destroy();
+    res.json({ message: "Enseignant supprimé" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 };
 
-// Ajouter un cours à un enseignant + calcul heures sup
+// Ajouter un cours et recalculer
 export const addCours = async (req, res) => {
-  const { enseignantId } = req.params;
-  const cours = await Cours.create({ ...req.body, EnseignantId: enseignantId });
+  try {
+    const enseignant = await Enseignant.findByPk(req.params.enseignantId);
+    if (!enseignant) return res.status(404).json({ error: "Enseignant introuvable" });
+    
+    const c = await Cours.create({ 
+      ...req.body, 
+      enseignantId: enseignant.id, 
+      enseignantName: enseignant.nom 
+    });
+    
+    const ens = await Enseignant.findByPk(enseignant.id, { 
+      include: { model: Cours, as: "cours" } 
+    });
+    res.status(201).json(recalcJSON(ens));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
 
-  // Recalcul dynamique des heures
-  const enseignant = await Enseignant.findByPk(enseignantId, { include: Cours });
-  const total = enseignant.Cours.reduce((sum, c) => sum + c.heures, 0);
-  const sup = total > enseignant.totalHeures ? total - enseignant.totalHeures : 0;
-  const normales = total - sup;
-
-  await enseignant.update({
-    heuresNormales: normales,
-    heuresSupplementaires: sup
-  });
-
-  res.json({ cours, enseignant });
+// Supprimer un cours et recalculer
+export const deleteCours = async (req, res) => {
+  try {
+    const c = await Cours.findByPk(req.params.id);
+    if (!c) return res.status(404).json({ error: "Cours introuvable" });
+    
+    const enseignantId = c.enseignantId;
+    await c.destroy();
+    
+    const ens = await Enseignant.findByPk(enseignantId, { 
+      include: { model: Cours, as: "cours" } 
+    });
+    res.json(recalcJSON(ens));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 };
