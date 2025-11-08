@@ -6,6 +6,7 @@ import sequelize from "./config/db.js";
 
 import enseignantRoutes from "./routes/enseignantRoutes.js";
 import importRoutes from "./routes/importRoutes.js";
+import coursRoutes from "./routes/coursRoutes.js"; // NOUVEAU
 
 dotenv.config();
 const app = express();
@@ -14,6 +15,7 @@ app.use(bodyParser.json({ limit: '10mb' }));
 
 app.use("/api/enseignants", enseignantRoutes);
 app.use("/api/import", importRoutes);
+app.use("/api/cours", coursRoutes); // NOUVEAU
 
 // simple root
 app.get("/", (req,res)=> res.json({ ok: true }));

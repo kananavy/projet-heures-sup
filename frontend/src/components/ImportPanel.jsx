@@ -10,6 +10,7 @@ export default function ImportPanel({ onImported }) {
   const [preview, setPreview] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [createMissing, setCreateMissing] = useState(true);
+  const [importResult, setImportResult] = useState(null);
 
  const targetFieldsByMode = {
   teachers: [
@@ -36,12 +37,14 @@ export default function ImportPanel({ onImported }) {
   ]
 };
 
-
   const handlePreview = async () => {
     if (!file) return alert("Choisir un fichier");
-    const fd = new FormData(); fd.append("file", file);
+    const fd = new FormData(); 
+    fd.append("file", file);
     try {
-      const res = await axios.post(`${API_BASE}/import/${mode}/preview`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+      const res = await axios.post(`${API_BASE}/import/${mode}/preview`, fd, { 
+        headers: { "Content-Type": "multipart/form-data" } 
+      });
       setPreview(res.data);
       setShowModal(true);
     } catch (err) {
@@ -56,14 +59,25 @@ export default function ImportPanel({ onImported }) {
       fd.append("file", file);
       fd.append("mapping", JSON.stringify(mapping));
       if (mode === "courses") fd.append("createMissing", createMissing ? "true" : "false");
-      const res = await axios.post(`${API_BASE}/import/${mode}`, fd, { headers: { "Content-Type": "multipart/form-data" } });
-      alert(`Import terminé: ${res.data.createdCount || res.data.createdCount}`);
-      setShowModal(false); setFile(null); setPreview(null);
+      
+      const res = await axios.post(`${API_BASE}/import/${mode}`, fd, { 
+        headers: { "Content-Type": "multipart/form-data" } 
+      });
+      
+      setImportResult(res.data);
+      setShowModal(false); 
+      setFile(null); 
+      setPreview(null);
       if (onImported) onImported();
+      
     } catch (err) {
       console.error(err);
       alert("Erreur import");
     }
+  };
+
+  const closeResult = () => {
+    setImportResult(null);
   };
 
   return (
@@ -81,7 +95,9 @@ export default function ImportPanel({ onImported }) {
             <input type="file" accept=".xls,.xlsx" className="form-control" onChange={e => setFile(e.target.files[0])} />
           </div>
           <div className="col-md-3 d-flex gap-2">
-            <button className="btn btn-primary w-100" onClick={handlePreview}>Aperçu & Mapper</button>
+            <button className="btn btn-primary w-100" onClick={handlePreview} disabled={!file}>
+              Aperçu & Mapper
+            </button>
           </div>
 
           {mode === "courses" && (
@@ -93,6 +109,34 @@ export default function ImportPanel({ onImported }) {
             </div>
           )}
         </div>
+
+        {/* Affichage des résultats d'importation */}
+        {importResult && (
+          <div className="mt-3 p-3 border rounded bg-light">
+            <div className="d-flex justify-content-between align-items-center mb-2">
+              <h6 className="mb-0">Résultat de l'importation</h6>
+              <button className="btn btn-sm btn-outline-secondary" onClick={closeResult}>×</button>
+            </div>
+            <p className="mb-2"><strong>{importResult.summary}</strong></p>
+            
+            {mode === "teachers" && (
+              <div className="small">
+                <div>Lignes traitées: {importResult.totalRows}</div>
+                <div className="text-success">Enseignants créés: {importResult.createdCount}</div>
+                <div className="text-warning">Enseignants mis à jour: {importResult.updatedCount}</div>
+                <div className="text-muted">Lignes ignorées: {importResult.skippedCount}</div>
+              </div>
+            )}
+            
+            {mode === "courses" && (
+              <div className="small">
+                <div>Lignes traitées: {importResult.totalRows}</div>
+                <div className="text-success">Cours créés: {importResult.createdCount}</div>
+                <div className="text-danger">Erreurs: {importResult.errorCount}</div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {preview && showModal && (

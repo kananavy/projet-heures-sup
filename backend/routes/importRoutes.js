@@ -3,12 +3,12 @@ import multer from "multer";
 import { previewExcel, importTeachers, importCourses } from "../controllers/importController.js";
 
 const upload = multer({ dest: "uploads/" });
-const r = express.Router();
+const router = express.Router();
 
-r.post("/teachers/preview", upload.single("file"), previewExcel);
-r.post("/courses/preview", upload.single("file"), previewExcel);
+router.post("/teachers/preview", upload.single("file"), previewExcel);
+router.post("/courses/preview", upload.single("file"), previewExcel);
 
-r.post("/teachers", upload.single("file"), importTeachers);
-r.post("/courses", upload.single("file"), importCourses);
+router.post("/teachers", upload.single("file"), importTeachers);
+router.post("/courses", upload.single("file"), importCourses);
 
-export default r;
+export default router;
