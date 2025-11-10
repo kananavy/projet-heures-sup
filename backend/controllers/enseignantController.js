@@ -2,49 +2,20 @@ import Enseignant from "../models/Enseignant.js";
 import Cours from "../models/Cours.js";
 import { Op } from "sequelize";
 
-// Fonction pour regrouper les cours par mention/parcours/niveau
-function groupCoursByContext(cours) {
-  const grouped = {};
-  
-  cours.forEach(c => {
-    const key = `${c.mention || 'N/A'}_${c.parcours || 'N/A'}_${c.niveau || 'N/A'}`;
-    if (!grouped[key]) {
-      grouped[key] = {
-        mention: c.mention,
-        parcours: c.parcours,
-        niveau: c.niveau,
-        cours: [],
-        totalHeures: 0
-      };
-    }
-    grouped[key].cours.push(c);
-    grouped[key].totalHeures += parseFloat(c.duree) || 0;
-  });
-  
-  return Object.values(grouped);
-}
-
-// Fonction pour recalculer les heures et renvoyer un objet détaillé
+// Fonction pour recalculer les heures UNIQUEMENT pour le contexte de l'enseignant
 function recalcJSON(enseignant) {
-  const total = enseignant.cours?.reduce((s, c) => s + (parseFloat(c.duree) || 0), 0) || 0;
+  // CORRECTION : Filtrer les cours selon le contexte de l'enseignant
+  const coursDuContexte = enseignant.cours?.filter(c => {
+    let match = true;
+    if (enseignant.mention) match = match && c.mention === enseignant.mention;
+    if (enseignant.parcours) match = match && c.parcours === enseignant.parcours;
+    if (enseignant.niveau) match = match && c.niveau === enseignant.niveau;
+    return match;
+  }) || [];
+  
+  // Calculer UNIQUEMENT avec les cours du bon contexte
+  const total = coursDuContexte.reduce((s, c) => s + (parseFloat(c.duree) || 0), 0);
   const sup = total > (enseignant.volumeHoraire || 0) ? total - (enseignant.volumeHoraire || 0) : 0;
-  
-  // Récupérer toutes les mentions/parcours/niveaux uniques où l'enseignant enseigne
-  const contexts = new Set();
-  enseignant.cours?.forEach(c => {
-    if (c.mention || c.parcours || c.niveau) {
-      contexts.add(JSON.stringify({
-        mention: c.mention,
-        parcours: c.parcours,
-        niveau: c.niveau
-      }));
-    }
-  });
-  
-  const uniqueContexts = Array.from(contexts).map(c => JSON.parse(c));
-  
-  // Grouper les cours par contexte
-  const coursParContext = groupCoursByContext(enseignant.cours || []);
   
   return {
     id: enseignant.id,
@@ -58,15 +29,10 @@ function recalcJSON(enseignant) {
     heuresNormales: total - sup,
     heuresSupplementaires: sup,
     totalHeures: total,
-    // Informations sur les différents contextes d'enseignement
-    contextes: uniqueContexts,
-    nombreContextes: uniqueContexts.length,
-    // Cours regroupés par mention/parcours/niveau
-    coursParContext: coursParContext,
-    // Tous les cours (liste complète)
-    cours: enseignant.cours?.map(c => ({
+    // Retourner UNIQUEMENT les cours du contexte
+    cours: coursDuContexte.map(c => ({
       id: c.id,
-      typeCours: c.typeCours || 'Normales', // Garantir une valeur
+      typeCours: c.typeCours || 'Normales',
       dateCours: c.dateCours,
       heureDebut: c.heureDebut,
       heureFin: c.heureFin,
@@ -77,7 +43,7 @@ function recalcJSON(enseignant) {
       ec: c.ec,
       duree: c.duree,
       enseignantName: c.enseignantName
-    })) || []
+    }))
   };
 }
 
@@ -92,19 +58,12 @@ export const list = async (req, res) => {
       where.nom = { [Op.like]: `%${search}%` };
     }
     
-    // Pour filtrer par mention/parcours/niveau, on doit passer par les cours
-    const coursWhere = {};
-    if (mention) coursWhere.mention = mention;
-    if (parcours) coursWhere.parcours = parcours;
-    if (niveau) coursWhere.niveau = niveau;
-    
     const enseignants = await Enseignant.findAll({
       where,
       include: { 
         model: Cours, 
         as: "cours",
-        where: Object.keys(coursWhere).length > 0 ? coursWhere : undefined,
-        required: Object.keys(coursWhere).length > 0, // INNER JOIN si filtres
+        required: false // LEFT JOIN pour avoir tous les enseignants
       },
       order: [["nom", "ASC"]]
     });
@@ -196,11 +155,17 @@ export const addCours = async (req, res) => {
     const enseignant = await Enseignant.findByPk(req.params.enseignantId);
     if (!enseignant) return res.status(404).json({ error: "Enseignant introuvable" });
     
-    // Créer le cours avec les infos de l'enseignant
+    // Créer le cours avec HÉRITAGE AUTOMATIQUE du contexte de l'enseignant
     const coursData = { 
       ...req.body, 
       enseignantId: enseignant.id, 
-      enseignantName: enseignant.nom
+      enseignantName: enseignant.nom,
+      // Héritage automatique du contexte si non fourni dans le body
+      mention: req.body.mention || enseignant.mention,
+      parcours: req.body.parcours || enseignant.parcours,
+      niveau: req.body.niveau || enseignant.niveau,
+      ue: req.body.ue || enseignant.ue,
+      ec: req.body.ec || enseignant.ec
     };
     
     await Cours.create(coursData);

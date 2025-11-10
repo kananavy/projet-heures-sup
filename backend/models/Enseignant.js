@@ -1,3 +1,7 @@
+
+// ============================================
+// models/Enseignant.js
+// ============================================
 import { DataTypes } from "sequelize";
 import sequelize from "../config/db.js";
 import Cours from "./Cours.js";

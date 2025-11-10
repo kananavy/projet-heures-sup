@@ -142,11 +142,27 @@ export const remove = async (req, res) => {
   }
 };
 
-// Récupérer les cours par enseignant
+// CORRECTION ICI : Récupérer les cours par enseignant avec filtrage par contexte
 export const getByEnseignant = async (req, res) => {
   try {
+    const { enseignantId } = req.params;
+    
+    // Récupérer l'enseignant pour obtenir son contexte
+    const enseignant = await Enseignant.findByPk(enseignantId);
+    if (!enseignant) {
+      return res.status(404).json({ error: "Enseignant introuvable" });
+    }
+    
+    // Construire le filtre WHERE avec le contexte de l'enseignant
+    const where = { enseignantId };
+    
+    // CORRECTION : Filtrer par le contexte spécifique de l'enseignant
+    if (enseignant.mention) where.mention = enseignant.mention;
+    if (enseignant.parcours) where.parcours = enseignant.parcours;
+    if (enseignant.niveau) where.niveau = enseignant.niveau;
+    
     const cours = await Cours.findAll({
-      where: { enseignantId: req.params.enseignantId },
+      where,
       include: { 
         model: Enseignant, 
         as: "enseignant",

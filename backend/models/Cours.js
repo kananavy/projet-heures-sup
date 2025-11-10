@@ -1,4 +1,6 @@
+// ============================================
 // models/Cours.js
+// ============================================
 import { DataTypes } from "sequelize";
 import sequelize from "../config/db.js";
 
@@ -13,11 +15,11 @@ const Cours = sequelize.define("Cours", {
     field: 'Date'
   },
   heureDebut: { 
-    type: DataTypes.STRING, // CHANGÉ DE TIME À STRING
+    type: DataTypes.STRING,
     field: 'Heure début'
   },
   heureFin: { 
-    type: DataTypes.STRING, // CHANGÉ DE TIME À STRING
+    type: DataTypes.STRING,
     field: 'Heure fin'
   },
   mention: { 
@@ -59,3 +61,4 @@ const Cours = sequelize.define("Cours", {
 });
 
 export default Cours;
+
