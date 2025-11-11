@@ -1,163 +1,281 @@
-import React, { useState, useEffect } from "react";
-import axios from "axios";
+import React, { useState, useEffect } from 'react';
+import api from '../config/api';
+import Modal from './ui/Modal';
+import Loading from './ui/Loading';
+import StatsCard from './StatsCard';
 
-export default function TeacherDetailModal({ teacher, onClose, onRefresh, apiBase }) {
+export default function TeacherDetailModal({ teacher, onClose, onRefresh, addNotification }) {
   const [data, setData] = useState(null);
   const [coursDetails, setCoursDetails] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(null);
 
-  // Récupère l'enseignant avec ses cours via la NOUVELLE API
   const fetchTeacherData = async () => {
     try {
+      setLoading(true);
+      
       // Récupérer les infos de base de l'enseignant
-      const teacherRes = await axios.get(`${apiBase}/enseignants/${teacher.id}`);
+      const teacherRes = await api.get(`/enseignants/${teacher.id}`);
       console.log("Données enseignant:", teacherRes.data);
       
-      // Récupérer les cours détaillés via la NOUVELLE API cours
-      const coursRes = await axios.get(`${apiBase}/cours/enseignant/${teacher.id}`);
+      // Récupérer les cours détaillés
+      const coursRes = await api.get(`/cours/enseignant/${teacher.id}`);
       console.log("Données cours détaillées:", coursRes.data);
       
       setData(teacherRes.data);
       setCoursDetails(coursRes.data);
     } catch (err) {
       console.error("Erreur récupération données:", err);
-      alert("Erreur récupération données");
+      addNotification("Erreur lors de la récupération des données", 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (teacher?.id) fetchTeacherData();
+    if (teacher?.id) {
+      fetchTeacherData();
+    }
   }, [teacher]);
 
-  const deleteCourse = async (id) => {
-    if (!confirm("Supprimer ce cours ?")) return;
+  const deleteCourse = async (course) => {
+    if (!confirm(`Supprimer le cours du ${course.dateCours} ?`)) {
+      return;
+    }
+
+    setDeleting(course.id);
     try {
-      // Utiliser la NOUVELLE API pour supprimer
-      await axios.delete(`${apiBase}/cours/${id}`);
-      await fetchTeacherData(); // recharge les données après suppression
+      await api.delete(`/cours/${course.id}`);
+      await fetchTeacherData(); // Recharger les données
       if (onRefresh) onRefresh();
+      addNotification('Cours supprimé avec succès', 'success');
     } catch (err) {
-      console.error(err);
-      alert("Erreur suppression cours");
+      console.error('Erreur suppression cours:', err);
+      addNotification('Erreur lors de la suppression du cours', 'error');
+    } finally {
+      setDeleting(null);
     }
   };
 
-  if (!data) return (
-    <div className="modal show d-block" tabIndex="-1">
-      <div className="modal-dialog modal-xl">
-        <div className="modal-content">
-          <div className="modal-body text-center">
-            <div className="spinner-border" role="status">
-              <span className="visually-hidden">Chargement...</span>
-            </div>
-          </div>
+  const getTypeBadgeClass = (type) => {
+    switch (type) {
+      case 'Normales':
+        return 'badge-primary';
+      case 'Suppl':
+        return 'badge-warning';
+      case 'Cours':
+        return 'badge-success';
+      case 'TD':
+        return 'badge-primary';
+      case 'TP':
+        return 'badge-primary';
+      default:
+        return 'badge-gray';
+    }
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  };
+
+  if (loading) {
+    return (
+      <Modal isOpen={true} onClose={onClose} title="Chargement..." size="lg">
+        <Loading text="Chargement des détails de l'enseignant..." />
+      </Modal>
+    );
+  }
+
+  if (!data) {
+    return (
+      <Modal isOpen={true} onClose={onClose} title="Erreur" size="md">
+        <div className="text-center py-xl">
+          <div className="text-4xl mb-lg">❌</div>
+          <p className="text-gray-600">Impossible de charger les données de l'enseignant</p>
         </div>
-      </div>
-    </div>
-  );
+      </Modal>
+    );
+  }
+
+  const stats = [
+    {
+      title: "Volume prévu",
+      value: `${data.volumeHoraire}h`,
+      subtitle: "heures planifiées",
+      icon: "📋",
+      type: "primary"
+    },
+    {
+      title: "Heures normales",
+      value: `${data.heuresNormales || 0}h`,
+      subtitle: "dans le volume",
+      icon: "✅",
+      type: "success"
+    },
+    {
+      title: "Heures supplémentaires",
+      value: `${data.heuresSupplementaires || 0}h`,
+      subtitle: "au-delà du volume",
+      icon: data.heuresSupplementaires > 0 ? "⚠️" : "✅",
+      type: data.heuresSupplementaires > 0 ? "warning" : "success"
+    },
+    {
+      title: "Total cours",
+      value: coursDetails.length,
+      subtitle: "cours enregistrés",
+      icon: "📚",
+      type: "primary"
+    }
+  ];
 
   return (
-    <div className="modal show d-block" tabIndex="-1">
-      <div className="modal-dialog modal-xl">
-        <div className="modal-content">
-          <div className="modal-header">
-            <h5 className="modal-title">Détails — {data.nom}</h5>
-            <button className="btn-close" onClick={onClose}></button>
-          </div>
-          <div className="modal-body">
-            {/* Résumé des heures */}
-            <div className="row mb-4">
-              <div className="col-md-4">
-                <div className="card bg-light">
-                  <div className="card-body text-center">
-                    <h6 className="card-title">Volume prévu</h6>
-                    <p className="card-text h4">{data.volumeHoraire}h</p>
-                  </div>
-                </div>
-              </div>
-              <div className="col-md-4">
-                <div className="card bg-success text-white">
-                  <div className="card-body text-center">
-                    <h6 className="card-title">Heures normales</h6>
-                    <p className="card-text h4">{data.heuresNormales}h</p>
-                  </div>
-                </div>
-              </div>
-              <div className="col-md-4">
-                <div className="card bg-warning">
-                  <div className="card-body text-center">
-                    <h6 className="card-title">Heures supplémentaires</h6>
-                    <p className="card-text h4">{data.heuresSupplementaires}h</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+ <Modal 
+  isOpen={true} 
+  onClose={onClose} 
+  title={`Détails — ${data.nom}`} 
+  size="full" // occupe toute la largeur sur mobile, taille XL sur desktop
+>
+  <div className="space-y-lg md:space-y-xl">
 
-            {/* Liste des cours avec NOUVELLES données */}
-            <h6>Liste des cours ({coursDetails.length || 0}) :</h6>
-            <div className="table-responsive">
-              <table className="table table-sm table-striped">
-                <thead className="table-dark">
-                  <tr>
-                    <th>Type</th>
-                    <th>Date</th>
-                    <th>Début</th>
-                    <th>Fin</th>
-                    <th>Mention</th>
-                    <th>Parcours</th>
-                    <th>Niveau</th>
-                    <th>UE</th>
-                    <th>EC</th>
-                    <th>Durée</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {coursDetails.length ? coursDetails.map(c => (
-                    <tr key={c.id}>
-                      <td>
-                        <span className={`badge ${
-                          c.typeCours === 'Normales' ? 'bg-primary' : 
-                          c.typeCours === 'Suppl' ? 'bg-warning' : 
-                          c.typeCours === 'Cours' ? 'bg-success' : 'bg-secondary'
-                        }`}>
-                          {c.typeCours || "Non spécifié"}
-                        </span>
-                      </td>
-                      <td>{c.dateCours || "-"}</td>
-                      <td>{c.heureDebut || "-"}</td>
-                      <td>{c.heureFin || "-"}</td>
-                      <td>{c.mention || "-"}</td>
-                      <td>{c.parcours || "-"}</td>
-                      <td>{c.niveau || "-"}</td>
-                      <td>{c.ue || "-"}</td>
-                      <td>{c.ec || "-"}</td>
-                      <td><strong>{c.duree}h</strong></td>
-                      <td>
-                        <button 
-                          className="btn btn-sm btn-outline-danger" 
-                          onClick={() => deleteCourse(c.id)}
-                          title="Supprimer ce cours"
-                        >
-                          <i className="bi bi-trash"></i>
-                        </button>
-                      </td>
-                    </tr>
-                  )) : (
-                    <tr>
-                      <td colSpan="11" className="text-center text-muted py-3">
-                        Aucun cours enregistré pour cet enseignant
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div className="modal-footer">
-            <button className="btn btn-secondary" onClick={onClose}>Fermer</button>
+    {/* Statistiques */}
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {stats.map((stat, index) => (
+        <StatsCard
+          key={index}
+          title={stat.title}
+          value={stat.value}
+          subtitle={stat.subtitle}
+          icon={stat.icon}
+          type={stat.type}
+          className="text-center"
+        />
+      ))}
+    </div>
+
+    {/* Informations académiques */}
+    {(data.mention || data.parcours || data.niveau || data.ue || data.ec) && (
+      <div className="modern-card">
+        <div className="modern-card-header">
+          <h4 className="modern-card-title">
+            <i className="bi bi-info-circle"></i>
+            Informations académiques
+          </h4>
+        </div>
+        <div className="modern-card-body">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {data.mention && (
+              <div>
+                <label className="form-label text-xs">Mention</label>
+                <p className="font-medium">{data.mention}</p>
+              </div>
+            )}
+            {data.parcours && (
+              <div>
+                <label className="form-label text-xs">Parcours</label>
+                <p className="font-medium">{data.parcours}</p>
+              </div>
+            )}
+            {data.niveau && (
+              <div>
+                <label className="form-label text-xs">Niveau</label>
+                <p className="font-medium">{data.niveau}</p>
+              </div>
+            )}
+            {data.ue && (
+              <div>
+                <label className="form-label text-xs">UE</label>
+                <p className="font-medium">{data.ue}</p>
+              </div>
+            )}
+            {data.ec && (
+              <div>
+                <label className="form-label text-xs">EC</label>
+                <p className="font-medium">{data.ec}</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
+    )}
+
+    {/* Liste des cours */}
+    <div className="modern-card">
+      <div className="modern-card-header">
+        <h4 className="modern-card-title">
+          <i className="bi bi-calendar-event"></i>
+          Liste des cours ({coursDetails.length})
+        </h4>
+      </div>
+      <div className="modern-card-body overflow-x-auto">
+        {coursDetails.length > 0 ? (
+          <table className="table table-striped w-full min-w-[600px]">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Date</th>
+                <th>Début</th>
+                <th>Fin</th>
+                <th>Mention</th>
+                <th>Parcours</th>
+                <th>Niveau</th>
+                <th>UE</th>
+                <th>EC</th>
+                <th className="text-center">Durée</th>
+                <th className="text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {coursDetails.map(cours => (
+                <tr key={cours.id}>
+                  <td>
+                    <span className={`badge ${getTypeBadgeClass(cours.typeCours)}`}>
+                      {cours.typeCours || "Non spécifié"}
+                    </span>
+                  </td>
+                  <td>{formatDate(cours.dateCours)}</td>
+                  <td>{cours.heureDebut || '-'}</td>
+                  <td>{cours.heureFin || '-'}</td>
+                  <td>{cours.mention || '-'}</td>
+                  <td>{cours.parcours || '-'}</td>
+                  <td>{cours.niveau || '-'}</td>
+                  <td>{cours.ue || '-'}</td>
+                  <td>{cours.ec || '-'}</td>
+                  <td className="text-center">{cours.duree}h</td>
+                  <td className="text-center">
+                    <button
+                      onClick={() => deleteCourse(cours)}
+                      className="btn btn-ghost btn-sm text-error"
+                      disabled={deleting === cours.id}
+                    >
+                      {deleting === cours.id ? (
+                        <div className="loading-spinner w-4 h-4"></div>
+                      ) : (
+                        <i className="bi bi-trash"></i>
+                      )}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="text-center py-8">
+            <div className="text-4xl mb-4">📅</div>
+            <h5 className="font-semibold text-gray-700 mb-2">Aucun cours enregistré</h5>
+            <p className="text-gray-500">Cet enseignant n'a pas encore de cours planifié</p>
+          </div>
+        )}
+      </div>
     </div>
+
+  </div>
+</Modal>
+
   );
 }
